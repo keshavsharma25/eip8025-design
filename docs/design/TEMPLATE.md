@@ -1,7 +1,7 @@
 ---
 status: Draft                # Draft | Accepted | Superseded
 authors: [<username>]
-workstream: verification     # gossip | verification | converged
+workstream: <workstream>     # gossip | verification | converged
 eip_repo: frisitano/EIPs
 eip_sha: <sha>               # These three SHAs pin the baseline this
 consensus_specs_sha: <sha>   # doc was written against; re-pin when
