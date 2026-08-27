@@ -9,15 +9,15 @@ grandine_upstream_sha: eaf220e60699cd63d4223ad2481e42fd15f67802
 superseded_by:
 ---
 
-# 0003 — EIP-8025 SSZ containers in Grandine types
+# 0004 — EIP-8025 SSZ containers in Grandine types
 
 ## Context
 
 EIP-8025 defines five wire types — `ProofType`, `ProofData`, `PublicInput`,
 `ExecutionProof`, `SignedExecutionProof` — that everything else in the
 roadmap manipulates. Both existing drafts compile against them:
-[0001](0001-sign-execution-proofs.md) needs `ExecutionProof<P>: SszHash`
-for its signing primitive, and [0002](0002-execution-proof-service.md)
+[0002](0002-sign-execution-proofs.md) needs `ExecutionProof<P>: SszHash`
+for its signing primitive, and [0003](0003-execution-proof-service.md)
 names these types throughout its trait and task signatures. This doc lands
 the types first so the signing and service docs unblock.
 
@@ -53,7 +53,7 @@ relied upon anywhere below. Two Grandine facts anchor the choices:
 **Goals**
 
 - Land the five types in `types/src/eip_8025/{primitives,containers}.rs`,
-  extending the layout agreed in 0001.
+  extending the layout agreed in 0002.
 - Add `P::MaxProofSize` to the `Preset` trait (all three presets) and
   `DOMAIN_EXECUTION_PROOF` plus `MAX_SIGNED_EXECUTION_PROOF_SIZE` to
   `eip_8025/consts.rs`.
@@ -69,12 +69,12 @@ relied upon anywhere below. Two Grandine facts anchor the choices:
   until payload-context binding lands (weeks 9–11), and its shape is the
   least stable part of the EIP.
 - Progressive merkleization (EIP-7916) in the `ssz` crate.
-- Signing primitive (0001), service/engine skeleton (0002), gossip
+- Signing primitive (0002), service/engine skeleton (0003), gossip
   validation plumbing.
 
 ## Design
 
-File layout — extends the sketch agreed between workstreams in 0001:
+File layout — extends the sketch agreed between workstreams in 0002:
 
 ```
 types/src/eip_8025/
@@ -87,7 +87,7 @@ types/src/preset.rs  # type MaxProofSize (this doc)
 `types/src/lib.rs` gains `pub mod primitives;` and `pub mod containers;`
 inside the existing `pub mod eip_8025` block, mirroring the fork modules.
 No `container_impls.rs` yet — the signing impl lives in `helper_functions`
-(0001), and no other trait impls exist until later weeks.
+(0002), and no other trait impls exist until later weeks.
 
 **Primitives** (`primitives.rs`):
 
@@ -135,9 +135,9 @@ Serde conventions copied from `gloas/containers.rs`: numerics via
 `string_or_native`, `deny_unknown_fields` throughout, empty serde bounds on
 generic structs. `ValidatorIndex` comes from `phase0::primitives`,
 `SignatureBytes` from the `bls` crate. The `Ssz` derive supplies
-serialization *and* `hash_tree_root`, satisfying 0001's single requirement
+serialization *and* `hash_tree_root`, satisfying 0002's single requirement
 (`ExecutionProof<P>: SszHash`) with no extra code. No inner `Arc` around
-`proof_data`: consumers share whole proofs via outer handles (0002 holds
+`proof_data`: consumers share whole proofs via outer handles (0003 holds
 `Arc<SignedExecutionProof<P>>`), unlike payload internals where
 `Arc<ByteList>` pays for frequent cheap clones.
 
@@ -160,7 +160,7 @@ real work while following the established byte-bound idiom. It also keeps
 the door open if `MAX_PROOF_SIZE` ever forks per-preset.
 
 **Constants** (`consts.rs`) — the domain constant moves into this doc's scope
-from [0001](0001-sign-execution-proofs.md) so the module lands self-contained:
+from [0002](0002-sign-execution-proofs.md) so the module lands self-contained:
 
 ```rust
 pub const DOMAIN_EXECUTION_PROOF: DomainType = H32(hex!("0F000000"));
@@ -182,7 +182,7 @@ need it; the remaining p2p constants arrive with the gossip workstream.
   `successful_validation` or `chain_config` off the wire — the specs'
   `process_execution_proof` and the p2p-interface matrix bind proofs via
   `new_payload_request_root` alone, and the extra fields describe
-  engine-side semantics, which 0002 resolves to keep engine-internal
+  engine-side semantics, which 0003 resolves to keep engine-internal
   anyway. Every extra field is also hash-tree-rooted into the signing
   root, widening the signed surface for zero consensus-layer use, and
   `ChainConfig` lives in the EIP's Execution-Layer section, not the CL
@@ -218,9 +218,9 @@ need it; the remaining p2p constants arrive with the gossip workstream.
   agreement across clients, tracked as an open question until reference
   vectors exist.
 - Bounded `ByteList` enforces `MAX_PROOF_SIZE` at decode time — the DoS
-  bound 0002's pipeline relies on (stage 1) is enforced before any task
+  bound 0003's pipeline relies on (stage 1) is enforced before any task
   logic runs.
-- Inert data types: no behavior change anywhere until 0001/0002 land their
+- Inert data types: no behavior change anywhere until 0002/0003 land their
   consumers; opt-out nodes never construct these objects.
 - Strict decoding (`deny_unknown_fields`, bounded lists) matches the
   house posture applied to every other wire container.
@@ -252,16 +252,16 @@ Unit tests (in-crate, `#[cfg(test)]`):
 Gate: `cargo check -p types --features bls/blst && cargo test -p types
 --features bls/blst eip_8025` (the bls crate has no default backend).
 
-Landing order afterwards: [0001](0001-sign-execution-proofs.md) and
-[0002](0002-execution-proof-service.md)'s `proof_engine` scaffold proceed in
-parallel; 0002's service task follows its scaffold.
+Landing order afterwards: [0002](0002-sign-execution-proofs.md) and
+[0003](0003-execution-proof-service.md)'s `proof_engine` scaffold proceed in
+parallel; 0003's service task follows its scaffold.
 
 ## Blockers
 
 None hard — this doc is the blocker for the rest, not the reverse.
 
 Upstream flux to re-pin on convergence: final `DOMAIN_EXECUTION_PROOF`
-value (`0x0D` EIP vs `0x0F` specs; tracked in 0001), the progressive-list
+value (`0x0D` EIP vs `0x0F` specs; tracked in 0002), the progressive-list
 direction, and any `PublicInput` field additions.
 
 ## Open questions
