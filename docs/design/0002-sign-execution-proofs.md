@@ -9,7 +9,7 @@ grandine_upstream_sha: eaf220e60699cd63d4223ad2481e42fd15f67802
 superseded_by:
 ---
 
-# 0001 — Sign execution proofs under `DOMAIN_EXECUTION_PROOF`
+# 0002 — Sign execution proofs under `DOMAIN_EXECUTION_PROOF`
 
 ## Context
 
@@ -68,14 +68,14 @@ single signing registry — no new crate:
 
 ```
 types/src/eip_8025/
-  consts.rs        # DOMAIN_EXECUTION_PROOF (container workstream — see [0003])
+  consts.rs        # DOMAIN_EXECUTION_PROOF (container workstream — see [0004])
   primitives.rs    # ProofType, PublicInput (container workstream)
   containers.rs    # ExecutionProof, SignedExecutionProof (container workstream)
 ```
 
 `types/src/lib.rs` declares the nested module mirroring `gloas`; the whole
 module tree (`consts`/`containers`/`primitives`) lands with the container
-workstream ([0003]). This doc only extends the import block inside
+workstream ([0004]). This doc only extends the import block inside
 `helper_functions/src/signing.rs`.
 
 Dependency direction is `helper_functions → types` (already the case; `types`
@@ -83,7 +83,7 @@ does not depend on `helper_functions`). The impl is a
 `helper_functions`-local trait for a `types`-local type, so placing it in
 `helper_functions/src/signing.rs` is orphan-rule valid with no cycle.
 
-**Domain constant** — owned by the container workstream: [0003] defines and
+**Domain constant** — owned by the container workstream: [0004] defines and
 lands `DOMAIN_EXECUTION_PROOF` in `types/src/eip_8025/consts.rs`, including the
 `0x0F` (consensus-specs) vs `0x0D` (EIP) divergence note. The signing impl
 consumes it via `DOMAIN_TYPE`; if the value moves upstream, the flip is still a
@@ -157,7 +157,7 @@ Against `eip8025-grandine/grandine`, in dependency order:
    Independent of containers; gate `cargo check -p helper_functions`.
 2. `helper_functions`: `SignForSingleForkAtSlot` impl for `ExecutionProof<P>`
    in `signing.rs` (+ `types::eip_8025` imports) + unit test. **Blocked** on
-   the container workstream ([0003]: `types/src/eip_8025/containers.rs`).
+   the container workstream ([0004]: `types/src/eip_8025/containers.rs`).
 
 Testing: unit test asserting `signing_root` equals
 `compute_signing_root(hash_tree_root(proof), compute_domain(config,
@@ -170,7 +170,7 @@ DOMAIN_EXECUTION_PROOF, epoch_at_slot(slot)))`, plus a sign/verify round trip.
   workstream; the `signing.rs` impl cannot compile until they land (agreed
   location: `types/src/eip_8025/containers.rs`). Signing requires only
   `ExecutionProof<P>: SszHash`. Now drafted as
-  [0003](0003-eip-8025-containers.md), which resolves the shape questions
+  [0004](0004-eip-8025-containers.md), which resolves the shape questions
   below (1-field `PublicInput`, classic `ByteList` alias, 4 MiB bound) —
   re-baseline hash-dependent test vectors only if those flip upstream.
 - **Domain value unresolved upstream** (`0x0D` EIP vs `0x0F` consensus-specs).
@@ -185,6 +185,6 @@ DOMAIN_EXECUTION_PROOF, epoch_at_slot(slot)))`, plus a sign/verify round trip.
 
 - Final `DOMAIN_EXECUTION_PROOF` value — re-pin this doc when specs converge.
 - Confirm containers land in `types/src/eip_8025/containers.rs` as agreed
-  between workstreams — recorded in [0003](0003-eip-8025-containers.md).
+  between workstreams — recorded in [0004](0004-eip-8025-containers.md).
 - Gossip validation task wiring (Accept/Ignore/Reject policy, cache timeouts)
   — deferred to the gossip workstream doc.
