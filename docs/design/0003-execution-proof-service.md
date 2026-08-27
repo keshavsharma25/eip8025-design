@@ -9,7 +9,7 @@ grandine_upstream_sha: eaf220e60699cd63d4223ad2481e42fd15f67802
 superseded_by:
 ---
 
-# 0002 — Skeleton the execution-proof service: controller task pipeline and ProofEngine boundary
+# 0003 — Skeleton the execution-proof service: controller task pipeline and ProofEngine boundary
 
 ## Context
 
@@ -24,7 +24,7 @@ cryptographic verification to an external verifier
 This doc defines the initial interface skeleton for both — the week-8
 deliverable of the verification workstream. It fixes shapes and ownership,
 not bodies. Signing primitives are covered by
-[0001](0001-sign-execution-proofs.md); the SSZ containers
+[0002](0002-sign-execution-proofs.md); the SSZ containers
 (`ProofType`, `PublicInput`, `ExecutionProof`, `SignedExecutionProof`) are
 the container workstream's deliverable (`types/src/eip_8025/containers.rs`).
 
@@ -62,7 +62,7 @@ how it will pan out. This skeleton treats it at interface level only.
 
 **Non-goals**
 
-- Signing primitive (doc 0001) and containers (doc 0003).
+- Signing primitive (doc 0002) and containers (doc 0004).
 - Gossip topic subscription and p2p routing (weeks 12–16).
 - k-of-n aggregation body; the threshold value itself is deferred.
 - Recursive anchor verification, retention/pruning, restart re-derivation.
@@ -175,7 +175,7 @@ pub struct ProcessExecutionProofTask<P: Preset, W, E: ProofEngine<P>> {
      count fixed by a named const, tunable later — marked seen _before_
      validity so duplicates cannot be replayed
   3. `is_active_validator` at the current epoch
-  4. BLS signature via the doc-0001 primitive
+  4. BLS signature via the doc-0002 primitive
      (`DOMAIN_EXECUTION_PROOF`, epoch of slot)
   5. payload-context resolution: bind
      `public_input.new_payload_request_root` to an accepted payload
@@ -247,13 +247,13 @@ lands.
 - **Containers** (`types/src/eip_8025/containers.rs`, container
   workstream): every interface here names `ExecutionProof<P>` or
   `SignedExecutionProof<P>` and cannot compile until they land. Interfaces
-  are drafted now, compile-gated on that merge — the same posture doc 0001
+  are drafted now, compile-gated on that merge — the same posture doc 0002
   takes toward its signing impl.
 
 ## Open questions
 
 - Where `MAX_PROOF_SIZE` lives and its exact value: resolved by
-  [0003](0003-eip-8025-containers.md) — it enters the `Preset` trait as
+  [0004](0004-eip-8025-containers.md) — it enters the `Preset` trait as
   `P::MaxProofSize` (4194304, mirroring `P::MaxExtraDataBytes`), and
   `MAX_SIGNED_EXECUTION_PROOF_SIZE` joins `eip_8025/consts.rs`; the bound
   is enforced at SSZ decode time, ahead of pipeline stage 1.
