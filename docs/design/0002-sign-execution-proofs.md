@@ -2,16 +2,15 @@
 status: Draft
 authors: [keshavsharma25]
 workstream: verification
-eip_repo: frisitano/EIPs
-eip_sha: 4855dbeb9a99702a8c4d948ceceb865fb3289759
-consensus_specs_sha: 321eca5b71049fcac6c63c2d956e5c5d7b60d689
+eip_repo: ethereum/EIPs
+eip_sha: ec5fdb982e101ed0262f68742429d230ca960ca3
+consensus_specs_sha: 7d6bd46a015a7dd316c5df855bd89e57c4aa6700
 grandine_upstream_sha: eaf220e60699cd63d4223ad2481e42fd15f67802
-grandine_stack_tip: 368f36e
+grandine_stack_tip: 366fabc
 grandine_stack:
-  - feature/eip8025-progressive-merkleization (e6694f3)
-  - feature/eip8025-progressive-byte-list (c89b7d3)
-  - feature/eip8025-proof-containers (eda4b27)
-  - feature/eip8025-payload-binding (368f36e)
+  - feature/eip8025-progressive-byte-list (8de28ef)
+  - feature/eip8025-proof-containers (4119302)
+  - feature/eip8025-payload-binding (366fabc, tip — adopts simplify shape)
 superseded_by:
 ---
 
@@ -20,13 +19,13 @@ superseded_by:
 ## Context
 
 EIP-8025 adds _execution proofs_: a prover (an active validator) signs an
-`ExecutionProof` message and gossips it as a `SignedExecutionProof`. Both spec
-sources agree on the signing recipe
+`ExecutionProofEnvelope` message and gossips it as a
+`SignedExecutionProofEnvelope`. Both spec sources agree on the signing recipe
 (consensus-specs `prover.md`, EIP):
 
 ```python
 domain = get_domain(state, DOMAIN_EXECUTION_PROOF, compute_epoch_at_slot(state.slot))
-signing_root = compute_signing_root(proof, domain)
+signing_root = compute_signing_root(proof_envelope, domain)
 ```
 
 Grandine already has the exact primitive for this: `SignForSingleForkAtSlot<P>`
@@ -35,41 +34,50 @@ the domain at `compute_epoch_at_slot(slot)`. This doc covers only the signing
 primitive — containers, gossip validation plumbing, and the proof engine are
 separate workstreams/docs.
 
-**Upstream baseline (re-baselined).** The specs are WIP and used to contradict
-each other; the container stack settled the provisional questions:
+**Upstream baseline (re-baselined, CL only).** The specs are WIP and contradict
+each other on the consensus layer; the container stack settled the provisional
+questions toward the simplify shape:
 
-| Value                    | EIP text     | consensus-specs `_features/eip8025`  | As implemented                 |
-| ------------------------ | ------------ | ------------------------------------ | ------------------------------ |
-| `DOMAIN_EXECUTION_PROOF` | `0x0D000000` | `0x0F000000`                         | `0x0F000000` (consensus-specs) |
-| `PublicInput`            | 3 fields     | 1 field (`new_payload_request_root`) | 1 field                        |
-| Proof data container     | `ByteList`   | `ProgressiveByteList`                | `ProgressiveByteList`          |
-| `MAX_PROOF_SIZE`         | 409600       | 4194304 ("not definitive")           | 4194304 (4 MiB)                |
+| Value                    | EIP text (CL only)                                              | consensus-specs `feat/simplify-eip8025`                                          | As implemented                 |
+| ------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------ |
+| `DOMAIN_EXECUTION_PROOF` | `0x0D000000`                                                    | `0x0F000000`                                                                     | `0x0F000000` (consensus-specs) |
+| `MAX_PROOF_SIZE`         | `409600` (400 KiB)                                              | `4194304` (4 MiB)                                                                | `4194304` (4 MiB)              |
+| Proof data container     | `ByteList[MAX_PROOF_SIZE]`                                      | `ProofData = ProgressiveList[Byte]`                                              | `ProofData` (`ProgressiveByteList`) |
+| `PublicInput`            | 3 fields (`root`, `bool`, `chain_config`)                       | 4-field (`root`, `bool`, `chain_id`, `schema_id`)                                | 4-field progressive            |
+| Signed message           | `ExecutionProof` / `get_execution_proof_signature`              | `ExecutionProofEnvelope` / `get_execution_proof_envelope_signature`              | `ExecutionProofEnvelope`       |
+| Gossip message           | `SignedExecutionProof`                                          | `SignedExecutionProofEnvelope`                                                   | `SignedExecutionProofEnvelope` |
 
-`0x0F` is adopted. The EIP's `0x0D000000` is stale — it collides with the
+EL (`chain_id`/`schema_id`/`0x1501`) is out of scope for this table.
+`ChainConfig` appears only in the EIP CL (`PublicInput.chain_config`); the
+simplify shape and this workstream use `chain_id` + `schema_id` instead.
+
+`0x0F` is adopted. The EIP CL's `0x0D000000` (at `ec5fdb98`) is stale — it collides with the
 spec's Gloas `DOMAIN_PROPOSER_PREFERENCES` assignment, which Grandine's own
-`gloas/consts.rs` does not define at this pin. The in-works simplification of
-the spec (`tau-lepton/feat/simplify-eip8025`) confirms `0x0F` and is cited as
-tie-breaker only, not adopted as a baseline.
+`gloas/consts.rs` does not define at this pin. The simplification of
+the spec (`tau-lepton/feat/simplify-eip8025`, adopted by the rewritten base)
+confirms `0x0F` and defines the envelope as the signed message.
 
 If the domain value moves, our cost is a one-line constant flip. If container
 fields move, the signing impl is unaffected (it only requires
-`ExecutionProof: SszHash`); only hash-dependent tests need re-baselining.
+`ExecutionProofEnvelope: SszHash`); only hash-dependent tests need re-baselining.
 
 ## Goals and non-goals
 
 **Goals**
 
-- Provide `sign`, `verify`, and `signing_root` for `ExecutionProof` matching
+- Provide `sign`, `verify`, and `signing_root` for `ExecutionProofEnvelope` matching
   the spec recipe exactly, via an existing Grandine signing trait.
 - Add `SignatureKind::ExecutionProof` so signature failures are reported with a
   distinct, user-visible kind.
 
 **Non-goals**
 
-- Implementing `ExecutionProof`/`SignedExecutionProof`/`PublicInput`/`ProofType`
+- Implementing `ExecutionProof`/`ExecutionProofEnvelope`/`SignedExecutionProofEnvelope`/`PublicInput`/`ProofType`
   containers (landed on the container workstream's stacked branches).
 - Gossip validation path (BLS + `is_active_validator` checks in
   `process_execution_proof` belong on the controller task path; separate doc).
+  EIP CL networking (`MAX_EXECUTION_PROOFS_PER_PAYLOAD`, `ExecutionProofStatus`,
+  `ByRange`/`ByRoot`, `eproof` ENR, `proof_serve_range`) is likewise out of scope.
 - `ProofEngine`/`ProofService` (separate doc).
 - Prover client flow (subscribing to events, constructing `NewPayloadRequest`).
 
@@ -82,7 +90,7 @@ single signing registry — no new crate:
 types/src/eip8025/
   consts.rs          # DOMAIN_EXECUTION_PROOF (this workstream); MAX_PROOF_SIZE (stack)
   primitives.rs      # ProofType (stack)
-  containers.rs      # ExecutionProof, SignedExecutionProof, ProofData, PublicInput (stack)
+  containers.rs      # ExecutionProof, ExecutionProofEnvelope, SignedExecutionProofEnvelope, ProofData, PublicInput (stack)
   container_impls.rs # new_payload_request_root (stack)
   error.rs           # PayloadBindingError (stack)
 ```
@@ -109,7 +117,7 @@ to the Gloas impls, with the `types::eip8025` import block extended;
 `sign`/`verify`/`signing_root` come free from the trait:
 
 ```rust
-impl<P: Preset> SignForSingleForkAtSlot<P> for ExecutionProof {
+impl<P: Preset> SignForSingleForkAtSlot<P> for ExecutionProofEnvelope {
     const DOMAIN_TYPE: DomainType = DOMAIN_EXECUTION_PROOF;
     const SIGNATURE_KIND: SignatureKind = SignatureKind::ExecutionProof;
 }
@@ -118,10 +126,16 @@ impl<P: Preset> SignForSingleForkAtSlot<P> for ExecutionProof {
 No epoch field is needed on the container: the epoch derives from the state's
 slot at sign/verify time, exactly as in `process_execution_proof`.
 
-**Message wrapper.** `SignedExecutionProof.message` is `Hc<ExecutionProof>`.
+**Message wrapper.** `SignedExecutionProofEnvelope.message` is `Hc<ExecutionProofEnvelope>`.
 `Hc<T>: SszHash` delegates to the inner value, so signing (and verifying) the
-bare `ExecutionProof` is equivalent to signing the wrapped message — no extra
+bare `ExecutionProofEnvelope` is equivalent to signing the wrapped message — no extra
 impl is needed.
+
+**`PublicInput` is proof-engine-facing only.** The prover validates
+`chain_id == DEPOSIT_CHAIN_ID` / `schema_id == STATELESS_INPUT_SCHEMA_ID`
+locally, then drops it (`get_signed_execution_proof_envelope`); the bare
+`ExecutionProof` is reconstructed by `get_execution_proof` for engine
+submission. It never travels and never enters the signing root.
 
 **Verification split.** The trait supplies cryptographic verification
 (`signed_proof.message.verify(config, &state, slot, signature, pubkey)`); the
@@ -131,7 +145,7 @@ controller task path (mirroring `ExecutionPayloadBidTask`,
 is a third, separate stage.
 
 ```
-prover:     ExecutionProof --sign(state.slot)--> SignedExecutionProof --> gossip
+prover:     ExecutionProofEnvelope --sign(state.slot)--> SignedExecutionProofEnvelope --> gossip
 verifier:   gossip --> [task: BLS verify + is_active_validator]
                      --> [proof engine: verify_execution_proof]
 ```
@@ -149,7 +163,7 @@ verifier:   gossip --> [task: BLS verify + is_active_validator]
   file gains a fork-specific entry.
 - **Baseline `0x0F` vs `0x0D`.** Chose `0x0F` (consensus-specs): newer,
   client-facing, and `0x0D` collides with `DOMAIN_PROPOSER_PREFERENCES`.
-  Adopted; the simplify branch confirms it as tie-breaker only.
+  Adopted; the simplify branch (now the base shape) confirms it.
 - **Wait for containers vs stub them.** Chose wait: land container-independent
   pieces first (SignatureKind); add the `signing.rs` impl once the real
   containers exist. Cost paid: the impl could not compile or be tested until
@@ -174,16 +188,19 @@ SignatureKind::ExecutionProof)`; `SignatureKind` is only consumed via
 
 Landed against the fork (`eip8025-grandine/grandine`), branch
 `feature/sign-execution-proofs`, stacked on
-`feature/eip8025-payload-binding`, in dependency order as four commits:
+`feature/eip8025-payload-binding` (`366fabc`, rewritten), in dependency order as four commits
+plus one envelope re-target follow-up (R5 — pivot stays visible for PR review):
 
 1. `feat: Add DOMAIN_EXECUTION_PROOF` — `types/src/eip8025/consts.rs`.
 2. `feat: Add SignatureKind::ExecutionProof` — `helper_functions/src/error.rs`
    (additive; nothing exhaustively matches `SignatureKind`).
-3. `feat: Implement signing for ExecutionProof` — `helper_functions/src/signing.rs`
-   registry entry (non-generic `ExecutionProof`).
+3. `feat: Implement signing for ExecutionProofEnvelope` — `helper_functions/src/signing.rs`
+   registry entry.
 4. `test: add execution proof signing tests` — suite below.
+5. Follow-up: re-target impl + tests from bare `ExecutionProof` to
+   `ExecutionProofEnvelope` per the rewritten base.
 
-Test suite (unit tests in `helper_functions/src/signing.rs`, Minimal preset):
+Test suite (child module `helper_functions/src/signing/tests.rs`, Minimal preset):
 
 - **(a) formula** — `signing_root` equals an independent transcription of the
   spec recipe in both fork-selection cases (current fork; and a slot from an
@@ -198,9 +215,13 @@ Test suite (unit tests in `helper_functions/src/signing.rs`, Minimal preset):
 - **(d) negative** — tampered message rejects with
   `Error::SignatureInvalid(SignatureKind::ExecutionProof)`, displayed as
   "execution proof signature".
-- **(e) `Hc` parity** — `Hc<ExecutionProof>` and bare `ExecutionProof` share an
-  object root, so the signature over the bare proof is exactly the one the
-  signed container carries.
+- **(e) `Hc` parity** — `Hc<ExecutionProofEnvelope>` and bare `ExecutionProofEnvelope` share an
+  object root, so the signature over the envelope is exactly the one the
+  signed container carries (mirrors `get_signed_execution_proof_envelope`).
+- **(f) envelope-vs-bare regression** — envelope root differs from bare
+  `ExecutionProof` root for identical proof bytes (bare input uses spec-valid
+  `chain_id = deposit_chain_id`, `schema_id = STATELESS_INPUT_SCHEMA_ID`);
+  encodes "we sign the envelope".
 
 Gates: `cargo check`/`cargo test` for `helper_functions` and `types` with
 `--features bls/blst` (the workspace `bls` dependency has no BLS backend unless
@@ -211,19 +232,17 @@ in the root manifest, unfulfilled expectations in `bls-core`, unknown cfg in
 
 ## Blockers
 
-- **Containers** — resolved: the container stack
-  (`feature/eip8025-progressive-merkleization` →
-  `feature/eip8025-payload-binding`) landed `ExecutionProof`,
-  `SignedExecutionProof`, `ProofData`, `PublicInput`, `ProofType`, and
-  `NewPayloadRequest` in `types/src/eip8025/`; pending upstream merge.
+- **Containers** — resolved: the rewritten `feature/eip8025-payload-binding`
+  (`366fabc`) adopts the simplify shape — `ExecutionProof`,
+  `ExecutionProofEnvelope`, `SignedExecutionProofEnvelope`, 4-field progressive
+  `PublicInput`, `ProofData`, `ProofType`, and `NewPayloadRequest` in
+  `types/src/eip8025/`; pending upstream merge.
 - **Domain value adopted pending upstream convergence.** `0x0F000000`
   (consensus-specs) is implemented; the EIP's `0x0D000000` is stale. Does not
   block implementation (one-line flip), but blocks Accepted status.
-- **In-works simplify branch moves the signed message.**
-  `tau-lepton/feat/simplify-eip8025` renames the signed message to
-  `ExecutionProofEnvelope` (4-field `PublicInput`, progressive
-  `NewPayloadRequest`). Not adopted; if it lands, the impl retargets with a
-  one-line change and only hash-dependent test vectors re-baseline.
+- **Pyspec cross-check left.** Test (b) pins are out-of-band (container suite +
+  script), not pyspec-checked — no eip8025 pyspec vectors on
+  `feat/simplify-eip8025` yet. Re-baseline pins when they land; no code change.
 
 ## Open questions
 
